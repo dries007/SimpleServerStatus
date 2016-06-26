@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!--
+        Copyright (C) 2016 Dries K. aka Dries007
+        Build with Bootstrap v4
+        Icons by Font Awesome
+        Source on github: https://github.com/dries007/SimpleServerStatus
+    -->
+
+    <meta name="description" content="VPS2 Server Status">
+    <meta name="author" content="Dries007">
+    <link rel="icon" href="favicon.ico">
+
+    <title>VPS2 Server Status</title>
+
+    <link href="css/bootstrap.css" rel="stylesheet">
+    <link href="css/font-awesome.css" rel="stylesheet">
+    <style>
+        /* Charts */
+        #cpu, #ram {
+            display: inline-block;
+            height: 250px;
+            width: 250px;
+        }
+
+        #disks {
+        }
+
+        .disk {
+            display: inline-block;
+            height: 200px;
+            width: 200px;
+        }
+
+        .name {
+            text-align: right;
+            vertical-align: middle !important;
+            width: 50%
+        }
+        .status {
+            text-align: left;
+        }
+
+        table {
+            padding-top: 1em;
+        }
+
+        /*
+         * Footer
+         */
+        footer {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            padding: 0.5rem 0;
+            color: #999;
+            text-align: center;
+            background-color: #f9f9f9;
+            border-top: .05rem solid #e5e5e5;
+        }
+        footer p {
+            margin-bottom: 0.5rem;
+        }
+        footer p:last-child {
+            margin-bottom: 0;
+        }
+        footer a {
+            color: inherit;
+        }
+    </style>
+
+    <script src="js/jquery.js" type="application/javascript"></script>
+    <script src="js/tether.js" type="application/javascript"></script>
+    <script src="js/bootstrap.js" type="application/javascript"></script>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="application/javascript">
+        google.charts.load('current', {'packages':['gauge']});
+        google.charts.setOnLoadCallback(drawChart);
+        function drawChart()
+        {
+            cpu();
+            ram();
+            disk();
+        }
+
+        function round(value, precision)
+        {
+            var multiplier = Math.pow(10, precision || 0);
+            return Math.round(value * multiplier) / multiplier;
+        }
+
+        function disk()
+        {
+            var disks = document.getElementById('disks');
+            var elements = [];
+            $.get('disk.php', function (data)
+            {
+                for (var name in data)
+                {
+                    if (!data.hasOwnProperty(name) || name == 'unit' || name == 'unit_size') continue;
+
+                    var e = document.createElement('div');
+                    e.id = name;
+                    e.classList.add('disk');
+                    disks.appendChild(e);
+
+                    var chart_data = new google.visualization.arrayToDataTable([
+                        ['Label', 'Value'],
+                        [name, round(data[name]['used'], 1)]
+                    ]);
+                    var options = {
+                        minorTicks: 5
+                    };
+                    options['max'] = Math.ceil(data[name]['total']);
+                    options['redTo'] = options['max'];
+                    options['redFrom'] = 0.90 * options['max'];
+                    options['yellowTo'] = 0.90 * options['max'];
+                    options['yellowFrom'] = 0.8 * options['max'];
+
+                    var chart = new google.visualization.Gauge(e);
+                    chart.draw(chart_data, options);
+
+                    elements[name] = {
+                        element: e,
+                        data: chart_data,
+                        options: options,
+                        chart: chart
+                    }
+                }
+
+                function update()
+                {
+                    try
+                    {
+                        $.get('disk.php', function (data)
+                        {
+                            for (var name in data)
+                            {
+                                if (!data.hasOwnProperty(name) || name == 'unit' || name == 'unit_size') continue;
+
+                                var chart = elements[name]['chart'];
+                                var chart_data = elements[name]['data'];
+                                chart_data.setValue(0, 1, round(data[name]['used'], 1));
+                                chart.draw(chart_data, elements[name]['options']);
+                            }
+
+                            setTimeout(update, 1000);
+                        }, 'json');
+                    }
+                    catch (e)
+                    {
+                        location.reload(true);
+                    }
+                }
+                update();
+            }, 'json');
+        }
+
+        function ram()
+        {
+            var chart_data = new google.visualization.arrayToDataTable([
+                ['Label', 'Value'],
+                ['RAM', 0.0]
+            ]);
+            var options = {
+                minorTicks: 10
+            };
+            var chart = new google.visualization.Gauge(document.getElementById('ram'));
+            chart.draw(chart_data, options);
+
+            function update()
+            {
+                $.get('mem.php', function (data)
+                {
+                    options['max'] = Math.ceil(data['total']);
+                    options['redTo'] = options['max'];
+                    options['redFrom'] = 0.95 * options['max'];
+                    options['yellowTo'] = 0.95 * options['max'];
+                    options['yellowFrom'] = 0.85 * options['max'];
+                    chart_data.setValue(0, 1, round(data['total'] - data['available'], 2));
+                    chart.draw(chart_data, options);
+                    setTimeout(update, 100);
+                }, 'json');
+            }
+            update();
+        }
+
+        function cpu()
+        {
+            var chart_data = new google.visualization.arrayToDataTable([
+                ['Label', 'Value'],
+                ['CPU', 0.0]
+            ]);
+            var options = {
+                redFrom: 90, redTo: 100,
+                yellowFrom: 75, yellowTo: 90,
+                minorTicks: 10
+            };
+            var chart = new google.visualization.Gauge(document.getElementById('cpu'));
+            chart.draw(chart_data, options);
+
+            function update()
+            {
+                $.get('cpu.php', function (data)
+                {
+                    chart_data.setValue(0, 1, round(100 * data['1'] / data['#'], 2));
+                    chart.draw(chart_data, options);
+                    setTimeout(update, 100);
+                }, 'json');
+            }
+            update();
+        }
+
+        $(function ()
+        {
+            console.log("Copyright (C) 2016 Dries K. aka Dries007");
+            $.get('services.php', function (data)
+            {
+                for (var name in data)
+                {
+                    if (!data.hasOwnProperty(name)) continue;
+                    var row = $('<tr>');
+                    row.append($('<td>').text(name).addClass('name'));
+                    var lnk = $('<a>').addClass('btn');
+
+                    if (data[name]['url']) lnk.attr('href', data[name]['url']);
+                    else lnk.addClass('disabled');
+
+                    if (data[name]['online']) lnk.addClass('btn-success').text('online');
+                    else lnk.addClass('btn-warning').text('offline');
+
+                    row.append($('<td>').addClass('status').append(lnk.addClass('btn-sm')));
+                    $('#services').append(row);
+                }
+            }, 'json');
+        });
+    </script>
+</head>
+<body>
+<div class="container">
+    <div class="text-xs-center">
+        <div id="cpu"></div>
+        <div id="ram"></div>
+    </div>
+    <div class="text-xs-center" id="disks">
+    </div>
+    <table class="table table-hover table-sm">
+        <thead>
+        <tr>
+            <th class="name">Service</th>
+            <th class="status">Status</th>
+        </tr>
+        </thead>
+        <tbody id="services">
+        </tbody>
+    </table>
+</div>
+<footer>
+    <p>Copyright &copy; 2016 <a href="//dries007.net">Dries K. aka Dries007</a></p>
+</footer>
+</body>
+</html>
