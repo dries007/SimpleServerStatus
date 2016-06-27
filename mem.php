@@ -16,6 +16,6 @@ echo json_encode([
     'unit' => UNIT,
     'unit_size' => UNIT_SIZE,
     'total' => $meminfo['MemTotal'],
-    'available' => $meminfo['MemAvailable'],
+    'available' => $meminfo['MemFree'] + $meminfo['Buffers'] + $meminfo['Cached'],
     'free' => $meminfo['MemFree'],
 ]);
